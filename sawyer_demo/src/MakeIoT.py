@@ -7,13 +7,15 @@ import moveit_commander
 import moveit_msgs.msg
 import geometry_msgs.msg
 ## END_SUB_TUTORIAL
-
+import json, ast
 from std_msgs.msg import String
 
 import intera_interface
 import intera_external_devices
 from intera_interface import CHECK_VERSION
 
+import pymongo
+from pymongo import MongoClient
 
 from intera_interface import (
     Gripper,
@@ -23,6 +25,16 @@ from intera_interface import (
 )
 
 def move_group_python_interface_tutorial():
+  uri = "mongodb://sawyer-mongo:xJENhr8tU9SnRzvn5DVXutJWDsaXBAm6urVHUT6zNirq2ycKx0BQwDbCz6lUqsyYrXc1ENnDIFb3YMTtlE6m5g==@sawyer-mongo.documents.azure.com:10255/?ssl=true"
+  client = MongoClient(uri)
+  
+  db = client.SawyerDB
+  collection = db.Command
+           
+  data = collection.find_one()
+  print "Value : %s" %  data.keys() 
+  print data
+  
   moveit_commander.roscpp_initialize(sys.argv)
   rospy.init_node('move_group_python_interface_tutorial',
                   anonymous=True)
@@ -39,20 +51,10 @@ def move_group_python_interface_tutorial():
   group = moveit_commander.MoveGroupCommander("right_arm")
 
 
-  display_trajectory_publisher = rospy.Publisher(
-                                      '/move_group/display_planned_path',
+  display_trajectory_publisher = rospy.Publisher(    '/move_group/display_planned_path',
                                       moveit_msgs.msg.DisplayTrajectory, queue_size=20)
 
 
-
- # print "============ Reference frame: %s" % group.get_planning_frame()
-
-#  print "============ Reference frame: %s" % group.get_end_effector_link()
-
- # print "============ Robot Groups:"
- # print robot.get_group_names()
-
-  #print robot.get_current_state()
 
 
   group.clear_pose_targets()
@@ -73,12 +75,19 @@ def move_group_python_interface_tutorial():
   
   ps  = group.get_current_pose("right_gripper")
 
-  #Reference Point
-  position ={'right_j6': 3.8832177734375, 'right_j5': -1.0124833984375, 'right_j4': -2.5925, 'right_j3': -2.53425390625, 'right_j2': -2.7182216796875, 'right_j1': -0.02024609375, 'right_j0': -2.2311181640625}
+  #Referee Point
+  jointpos =  data['Joints']
+  print jointpos
+
+
+  position = ast.literal_eval(json.dumps(jointpos))
+  print position
+ #position ={'right_j6': 3.8832177734375, 'right_j5': -1.0124833984375, 'right_j4': -2.5925, 'right_j3': -2.53425390625, 'right_j2': -2.7182216796875, 'right_j1': -0.02024609375, 'right_j0': -2.2311181640625}
+ 
   group.set_joint_value_target(position)
   plan2 = group.plan()
   group.go(wait=True)
-
+  return
   #Down
   position ={'right_j6': 3.8086181640625, 'right_j5': -0.8446669921875, 'right_j4': -2.4781865234375, 'right_j3': -2.3397265625, 'right_j2': -2.7640244140625, 'right_j1': 0.087705078125, 'right_j0': -2.1369375}
   group.set_joint_value_target(position)
@@ -151,7 +160,7 @@ def move_group_python_interface_tutorial():
 
   gripper.open()
 
-  collision_object = moveit_msgs.msg.CollisionObject()
+  #collision_object = moveit_msgs.msg.CollisionObject()
 
 
 
