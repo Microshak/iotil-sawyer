@@ -2,7 +2,7 @@
 
 import argparse
 import sys
-
+import uuid
 import rospy
 import intera_interface
 
@@ -15,19 +15,21 @@ from intera_interface import (
 )
 import pymongo
 from pymongo import MongoClient
-
+import datetime
 
 class RecordMotion(object):
 
-    def __init__(self, arm, name):
+    def __init__(self, arm, name,start):
         uri = "mongodb://sawyer-mongo:xJENhr8tU9SnRzvn5DVXutJWDsaXBAm6urVHUT6zNirq2ycKx0BQwDbCz6lUqsyYrXc1ENnDIFb3YMTtlE6m5g==@sawyer-mongo.documents.azure.com:10255/?ssl=true"
         client = MongoClient(uri)
         self.db = client.SawyerDB
         self.collection = self.db.Commands
         self.commandName = name
-        self.commandNumber = 0
+        self.commandNumber = start
         rp = RobotParams()
         self._lastJoin = {}        
+        self.lastButtonPress = datetime.datetime.now()
+
 
         self._rs = intera_interface.RobotEnable()
         self._init_state = self._rs.state().enabled
@@ -72,6 +74,11 @@ class RecordMotion(object):
         return True
    
     def record(self):
+
+
+     
+
+
       self._cuff.register_callback(self._close_action,'{0}_button_upper'.format(self._arm))
       self._cuff.register_callback(self._open_action,'{0}_button_lower'.format(self._arm))
       print "Registering COntrols"
@@ -94,14 +101,23 @@ class RecordMotion(object):
         print "we cool"
 
     def _record_spot(self, value):
+        time = (datetime.datetime.now() - self.lastButtonPress  ).seconds
+        print time
+        print "!!!!!!!!!!!!!"
+        if time < 2:
+          print "time to bail"
+          return
+        
+        self.lastButtonPress  =datetime.datetime.now() 
         print "spot record"
         self.headLight("red")
         self.commandNumber += 1
+       
         posts = self.db.Command
         joints = {}
         names = self._limb.joint_names()
         for join in names :
-           joints.update({join:self._limb.joint_angle(join)})
+          joints.update({join:self._limb.joint_angle(join)})
         if joints == self._lastJoin:
             return 0
 
@@ -173,12 +189,17 @@ def main():
                                      description=main.__doc__)
     
     parser.add_argument('-n', '--name', dest='name')
+   # args = parser.parse_args(rospy.myargv()[1:])
+    parser.add_argument('-s', '--start', dest='start', type=int)
     args = parser.parse_args(rospy.myargv()[1:])
 
 
-    rospy.init_node("MIKERNODE21",log_level=rospy.ERROR)
+    rospy.init_node("Record" + str(uuid.uuid4().hex),log_level=rospy.ERROR)
 
-    motion = RecordMotion('right', args.name)
+    if args.start == None:
+       args.start = 0
+
+    motion = RecordMotion('right', args.name, args.start)
 
     rospy.on_shutdown(motion.clean_shutdown)
     motion.record()
@@ -192,4 +213,3 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
-INFO
