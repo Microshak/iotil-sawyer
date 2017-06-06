@@ -23,6 +23,7 @@ from intera_interface import (
     Lights,
     Cuff,
     RobotParams,
+    Head,
 )
 import uuid
 
@@ -30,13 +31,16 @@ class PlayCommands(object):
 
   def __init__(self, Name):
     
-    
     moveit_commander.roscpp_initialize(sys.argv)
     rospy.init_node('mid' + str(uuid.uuid4().hex) ,     anonymous=True)
-   
+
+    self.head_display = intera_interface.HeadDisplay()
+    self.head_display.display_image("/home/microshak/Pictures/Ready.png", False, 1.0) 
+    self.head = intera_interface.Head()
+    self.head.set_pan(0.5,1.0)
+    self.head.set_pan(-0.5,1.0)
     rp = RobotParams()
     valid_limbs = rp.get_limb_names()
-    
  
     robot = moveit_commander.RobotCommander()
         
@@ -86,13 +90,14 @@ class PlayCommands(object):
 
     switch = {
       "Move": lambda x: self.move(x),
-      "Gripper": lambda x: self.gripper(x)
-
+      "Gripper": lambda x: self.gripper(x),
+      "Neutral":lambda x:self.neutral(x)
     }
 
     print "============Start"
     rospy.sleep(1)
     ps  = self.group.get_current_pose("right_gripper")
+    
     for record in data:
       rospy.sleep(1)
       switch[record["Action"]](record)
@@ -105,20 +110,24 @@ class PlayCommands(object):
    # moveit_commander.roscpp_shutdown()
 
 
-  #Referee Point
+ #Referee Point
    # self.jointpos =  data['Joints']
    # return
 
   #Down
-    limb = intera_interface.Limb("right")
-    limb.move_to_neutral()
+#    limb = intera_interface.Limb("right")
+#    limb.move_to_neutral()
   def gripper(self,data):
     if data["Open"]:
       self.endeffector.open()
+      self.head_display.display_image("/home/microshak/Pictures/GripperO.png", False, 1.0) 
     else:
        self.endeffector.close()
- 
+       self.head_display.display_image("/home/microshak/Pictures/GripperC.png", False, 1.0) 
+  
   def move(self, jointpos):
+    self.head_display.display_image("/home/microshak/Pictures/Moving.png", False, 1.0) 
+    
     print "MOVING!!!!!!!!!!!!!!!!!"
 
     position = ast.literal_eval(json.dumps(jointpos['Joints']))

@@ -43,7 +43,10 @@ class RecordMotion(object):
         valid_limbs = rp.get_limb_names()
         self._arm = rp.get_limb_names()[0]
         self._limb = intera_interface.Limb(arm)
-
+        if start == None:
+            limb = intera_interface.Limb("right")
+            limb.move_to_neutral() 
+        
         print(self._arm)
         # inputs
         self._cuff = Cuff(limb='right')
@@ -68,9 +71,9 @@ class RecordMotion(object):
 
     def clean_shutdown(self):
         print("\nExiting example...")
-     #   if not self._init_state:
-     #       print("Disabling robot...")
-        self._rs.disable()
+        if not self._init_state:
+            print("Disabling robot...")
+       # self._rs.disable()
         return True
    
     def record(self):
@@ -195,7 +198,7 @@ def main():
 
 
     rospy.init_node("Record" + str(uuid.uuid4().hex),log_level=rospy.ERROR)
-
+    print "Record" + str(uuid.uuid4().hex)
     if args.start == None:
        args.start = 0
 
