@@ -7,7 +7,7 @@ import rospy
 import moveit_commander
 import moveit_msgs.msg
 import geometry_msgs.msg
-## END_SUB_TUTORIAL
+
 import json, ast
 from std_msgs.msg import String
 

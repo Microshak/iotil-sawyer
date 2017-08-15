@@ -17,56 +17,11 @@ import pymongo
 from pymongo import MongoClient
 import datetime
 
-from intera_core_msgs.srv import (
-    SolvePositionFK,
-    SolvePositionFKRequest,
-)
-
-from std_msgs.msg import Header
-from sensor_msgs.msg import JointState
-
-import json, ast
-
-
-import iothub_client
-from iothub_client import IoTHubClient, IoTHubClientError, IoTHubTransportProvider
-from iothub_client import IoTHubMessage, IoTHubMessageDispositionResult, IoTHubError, DeviceMethodReturnValue
-
-
-RECEIVE_CONTEXT = 0
-MESSAGE_TIMEOUT = 10000
-RECEIVE_CALLBACKS = 0
-IoTHubMessages = []
-
-
-
-
-def receive_message_callback(message, counter):
-    global RECEIVE_CALLBACKS
-    global IoTHubMessages 
-    print "RECIEVED IoT MESSAGE"
-    message_buffer = message.get_bytearray()
-    size = len(message_buffer)
-    lit =  ast.literal_eval(message_buffer[:size].decode('utf-8')) 
-    for key in lit:
-        IoTHubMessages.insert(0,{key:lit[key]})
-        print key +"---" +str(lit[key])
-
-    counter += 1
-    RECEIVE_CALLBACKS += 1
-    return IoTHubMessageDispositionResult.ACCEPTED
-
-
 class RecordMotion(object):
 
-
     def __init__(self, arm, name,start):
-
-        #Mongo
         uri = "mongodb://sawyer-mongo:xJENhr8tU9SnRzvn5DVXutJWDsaXBAm6urVHUT6zNirq2ycKx0BQwDbCz6lUqsyYrXc1ENnDIFb3YMTtlE6m5g==@sawyer-mongo.documents.azure.com:10255/?ssl=true"
         client = MongoClient(uri)
-        
-        #Robot
         self.db = client.SawyerDB
         self.collection = self.db.Commands
         self.commandName = name
@@ -74,8 +29,8 @@ class RecordMotion(object):
         rp = RobotParams()
         self._lastJoin = {}        
         self.lastButtonPress = datetime.datetime.now()
-  
-        
+
+
         self._rs = intera_interface.RobotEnable()
         self._init_state = self._rs.state().enabled
         print("Enabling robot... ")
@@ -105,6 +60,7 @@ class RecordMotion(object):
             #if not (self._gripper.is_calibrated() or self._gripper.calibrate() == True):
             #  rospy.logerr("({0}_gripper) calibration failed.".format(self._gripper.name))
             #  raise
+         
         
             
         except:
@@ -112,14 +68,6 @@ class RecordMotion(object):
             msg = ("{0} Gripper is not connected to the robot."
                    " Running cuff-light connection only.").format(arm.capitalize())
             rospy.logwarn(msg)
-
-        CONNECTION_STRING = "HostName=RobotForman.azure-devices.net;DeviceId=PythonTest;SharedAccessKey=oh9Fj0mAMWJZpNNyeJ+bSecVH3cBQwbzjDnoVmeSV5g="
-        self.protocol=IoTHubTransportProvider.MQTT
-        self.client = IoTHubClient(CONNECTION_STRING, self.protocol)
-        self.client.set_option("messageTimeout", MESSAGE_TIMEOUT)
-        self.client.set_message_callback(receive_message_callback, RECEIVE_CONTEXT)
-    
- 
 
     def clean_shutdown(self):
         print("\nExiting example...")
@@ -153,14 +101,14 @@ class RecordMotion(object):
 
     def _record_OK (self, value):
         self.headLight("red")
-        print "recording"
+        print "we cool"
 
     def _record_spot(self, value):
         time = (datetime.datetime.now() - self.lastButtonPress  ).seconds
         print time
-        print "Redording"
+        print "!!!!!!!!!!!!!"
         if time < 2:
-          #print "time to bail"
+          print "time to bail"
           return
         
         self.lastButtonPress  =datetime.datetime.now() 
@@ -171,39 +119,16 @@ class RecordMotion(object):
         posts = self.db.Command
         joints = {}
         names = self._limb.joint_names()
-        jointpos = JointState()
-        jointpos.name = []
-        jointpos.position = []
-   
         for join in names :
           joints.update({join:self._limb.joint_angle(join)})
-          jointpos.name.append(join)
-          jointpos.position.append(self._limb.joint_angle(join))
-       # if joints == self._lastJoin:
-       #     return 0
-        cartisian = self.fk_service_client(jointpos).pose_stamp[0].pose
-        z = cartisian.position.z  - .004377
-        carobj = {
-            "position":{ 
-  "x": cartisian.position.x,
-  "y": cartisian.position.y,
-  "z": z},
-"orientation":{ 
-  "x": cartisian.orientation.x,
-  "y":  cartisian.orientation.y,
-  "z":  cartisian.orientation.z,
-  "w": cartisian.orientation.w
-    }
-        }
-        
-
-
-
+        if joints == self._lastJoin:
+            return 0
 
         self._lastJoin = joints
-        post = {"Name" : self.commandName, "Order" : self.commandNumber, "Action":"Move",  "Cartisian":carobj}
+        post = {"Name" : self.commandName, "Order" : self.commandNumber, "Action":"Move", "Joints": joints}
         
         posts.insert(post)
+        print post
         
         self.headLight("green")
 
@@ -218,8 +143,7 @@ class RecordMotion(object):
             self.headLight("green")
 
     def _close_action(self, value):
-        rospy.logdebug("gripper close triggered")
-        
+    
         self.headLight("red")
         if value and self._gripper.is_ready():
             rospy.logdebug("gripper close triggered")
@@ -229,35 +153,6 @@ class RecordMotion(object):
             post = {"Name" : self.commandName, "Order" : self.commandNumber, "Action": "Gripper","Open": False }
             posts.insert(post)
             self.headLight("green")            
-
-    def fk_service_client(self,joints):
-        ns = "ExternalTools/right/PositionKinematicsNode/FKService"
-        fksvc = rospy.ServiceProxy(ns, SolvePositionFK)
-        fkreq = SolvePositionFKRequest()
-         # Add desired pose for forward kinematics
-        fkreq.configuration.append(joints)
-        # Request forward kinematics from base to "right_hand" link
-        fkreq.tip_names.append('right_hand')
-
-        try:
-            rospy.wait_for_service(ns, 5.0)
-            resp = fksvc(fkreq)
-            return resp
-        except (rospy.ServiceException, rospy.ROSException), e:
-            rospy.logerr("Service call failed: %s" % (e,))
-            return geometry_msgs.msg.PoseStamped()
-
-    # Check if result valid
-        if (resp.isValid[0]):
-            rospy.loginfo("SUCCESS - Valid Cartesian Solution Found")
-            rospy.loginfo("\nFK Cartesian Solution:\n")
-            rospy.loginfo("------------------")
-            rospy.loginfo("Response Message:\n%s", resp)
-        else:
-            rospy.logerr("INVALID JOINTS - No Cartesian Solution Found.")
-            return {}
-        return resp
-
 
     def _light_action(self, value):
         if value:

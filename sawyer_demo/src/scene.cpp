@@ -43,7 +43,7 @@
 #include <moveit_msgs/AttachedCollisionObject.h>
 #include <moveit_msgs/CollisionObject.h>
 #include <iostream>
-
+#include <geometric_shapes/shape_operations.h>
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "move_group_interface_tutorial");
@@ -86,6 +86,41 @@ int main(int argc, char **argv)
   /* The id of the object is used to identify it. */
   collision_object.id = "table";
 
+
+  /**********************************************/
+   // Vector3d b(0.001, 0.001, 0.001);
+    moveit_msgs::CollisionObject co;
+    co.id = "wall";
+    shapes::Mesh* m = shapes::createMeshFromResource("file:///home/microshak/ros_ws/src/Sawyer2/SawyerWorkSpace/stl/3d-model.stl"); 
+    ROS_INFO("Wall mesh loaded");
+
+    shape_msgs::Mesh mesh;
+    shapes::ShapeMsg mesh_msg;  
+    shapes::constructMsgFromShape(m, mesh_msg);
+    mesh = boost::get<shape_msgs::Mesh>(mesh_msg);
+
+    co.meshes.resize(1);
+    co.mesh_poses.resize(1);
+    co.meshes[0] = mesh;
+    co.header.frame_id = "wall";   
+    co.mesh_poses[0].position.x = 0.560651;
+    co.mesh_poses[0].position.y = 0.579113;
+    co.mesh_poses[0].position.z = 0.0;
+    co.mesh_poses[0].orientation.w= 0.0; 
+    co.mesh_poses[0].orientation.x= 0.0; 
+    co.mesh_poses[0].orientation.y= 0.0;
+    co.mesh_poses[0].orientation.z= 0.0;   
+
+    co.meshes.push_back(mesh);
+    co.mesh_poses.push_back(co.mesh_poses[0]);
+    co.operation = co.ADD;
+    std::vector<moveit_msgs::CollisionObject> collision_objects;
+    collision_objects.push_back(co);
+    ROS_INFO("Wall added into the world");
+    planning_scene_interface.addCollisionObjects(collision_objects);
+
+
+
   /* Define a box to add to the world. */
   shape_msgs::SolidPrimitive primitive;
   primitive.type = primitive.BOX;
@@ -105,7 +140,7 @@ int main(int argc, char **argv)
   collision_object.primitive_poses.push_back(box_pose);
   collision_object.operation = collision_object.ADD;
 
-  std::vector<moveit_msgs::CollisionObject> collision_objects;
+  //std::vector<moveit_msgs::CollisionObject> collision_objects;
   collision_objects.push_back(collision_object);
 
   // Now, let's add the collision object into the world
