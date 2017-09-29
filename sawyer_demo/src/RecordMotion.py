@@ -28,33 +28,11 @@ from sensor_msgs.msg import JointState
 import json, ast
 
 
-import iothub_client
-from iothub_client import IoTHubClient, IoTHubClientError, IoTHubTransportProvider
-from iothub_client import IoTHubMessage, IoTHubMessageDispositionResult, IoTHubError, DeviceMethodReturnValue
-
-
-RECEIVE_CONTEXT = 0
-MESSAGE_TIMEOUT = 10000
-RECEIVE_CALLBACKS = 0
-IoTHubMessages = []
 
 
 
 
-def receive_message_callback(message, counter):
-    global RECEIVE_CALLBACKS
-    global IoTHubMessages 
-    print "RECIEVED IoT MESSAGE"
-    message_buffer = message.get_bytearray()
-    size = len(message_buffer)
-    lit =  ast.literal_eval(message_buffer[:size].decode('utf-8')) 
-    for key in lit:
-        IoTHubMessages.insert(0,{key:lit[key]})
-        print key +"---" +str(lit[key])
 
-    counter += 1
-    RECEIVE_CALLBACKS += 1
-    return IoTHubMessageDispositionResult.ACCEPTED
 
 
 class RecordMotion(object):
@@ -88,6 +66,7 @@ class RecordMotion(object):
         valid_limbs = rp.get_limb_names()
         self._arm = rp.get_limb_names()[0]
         self._limb = intera_interface.Limb(arm)
+        
         if start == None:
             limb = intera_interface.Limb("right")
             limb.move_to_neutral() 
@@ -113,13 +92,7 @@ class RecordMotion(object):
                    " Running cuff-light connection only.").format(arm.capitalize())
             rospy.logwarn(msg)
 
-        CONNECTION_STRING = "HostName=RobotForman.azure-devices.net;DeviceId=PythonTest;SharedAccessKey=oh9Fj0mAMWJZpNNyeJ+bSecVH3cBQwbzjDnoVmeSV5g="
-        self.protocol=IoTHubTransportProvider.MQTT
-        self.client = IoTHubClient(CONNECTION_STRING, self.protocol)
-        self.client.set_option("messageTimeout", MESSAGE_TIMEOUT)
-        self.client.set_message_callback(receive_message_callback, RECEIVE_CONTEXT)
-    
- 
+     
 
     def clean_shutdown(self):
         print("\nExiting example...")
@@ -182,6 +155,7 @@ class RecordMotion(object):
        # if joints == self._lastJoin:
        #     return 0
         cartisian = self.fk_service_client(jointpos).pose_stamp[0].pose
+        
         z = cartisian.position.z  - .004377
         carobj = {
             "position":{ 
@@ -195,7 +169,7 @@ class RecordMotion(object):
   "w": cartisian.orientation.w
     }
         }
-        
+        print(carobj)  
 
 
 

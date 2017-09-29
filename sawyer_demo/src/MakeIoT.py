@@ -37,27 +37,39 @@ from iothub_client import IoTHubClient, IoTHubClientError, IoTHubTransportProvid
 from iothub_client import IoTHubMessage, IoTHubMessageDispositionResult, IoTHubError, DeviceMethodReturnValue
 #from iothub_client_args import get_iothub_opt, OptionError
 
-RECEIVE_CONTEXT = 0
-MESSAGE_TIMEOUT = 10000
+RECEIVE_CONTEXT = 10000
+MESSAGE_TIMEOUT = 1000000
 RECEIVE_CALLBACKS = 0
 IoTHubMessages = []
-
+MINIMUM_POLLING_TIME = 5
 
 
 def receive_message_callback(message, counter):
+    headLight('green')
+    
     global RECEIVE_CALLBACKS
     global IoTHubMessages 
-    print "RECIEVED IoT MESSAGE"
+   
     message_buffer = message.get_bytearray()
     size = len(message_buffer)
     lit =  ast.literal_eval(message_buffer[:size].decode('utf-8')) 
+    print(lit)
     for key in lit:
-        IoTHubMessages.insert(0,{key:lit[key]})
         print key +"---" +str(lit[key])
 
+    IoTHubMessages.insert(0,lit)
+    print(IoTHubMessages[0]["Cartisian.orientation.w"])
     counter += 1
     RECEIVE_CALLBACKS += 1
+    headLight('blue')
+    
     return IoTHubMessageDispositionResult.ACCEPTED
+
+def headLight(value):
+      colors = ["red","blue","green"]
+      light = Lights()
+      for color in colors:
+          light.set_light_state('head_{0}_light'.format(color), on=bool(value == color))
 
 
 class PlayCommands(object):
@@ -66,10 +78,11 @@ class PlayCommands(object):
     
     CONNECTION_STRING = "HostName=RobotForman.azure-devices.net;DeviceId=PythonTest;SharedAccessKey=oh9Fj0mAMWJZpNNyeJ+bSecVH3cBQwbzjDnoVmeSV5g="
   
-    self.protocol=IoTHubTransportProvider.MQTT
+    self.protocol=IoTHubTransportProvider.HTTP
     self.client = IoTHubClient(CONNECTION_STRING, self.protocol)
     self.client.set_option("messageTimeout", MESSAGE_TIMEOUT)
-  
+    self.client.set_option("MinimumPollingTime", MINIMUM_POLLING_TIME)
+
     self.client.set_message_callback(receive_message_callback, RECEIVE_CONTEXT)
 
     
@@ -83,13 +96,13 @@ class PlayCommands(object):
     valid_limbs = rp.get_limb_names()
  
     robot = moveit_commander.RobotCommander()
-        
+    rp.max_velocity_scaling_factor = .5    
     scene = moveit_commander.PlanningSceneInterface()
 
     self.group = moveit_commander.MoveGroupCommander("right_arm")
     
     display_trajectory_publisher = rospy.Publisher('/move_group/display_planned_path',  moveit_msgs.msg.DisplayTrajectory, queue_size=20)
-
+    
 
 
     self.light = Lights()
@@ -172,15 +185,35 @@ class PlayCommands(object):
       self.headLight("red")
       rospy.sleep(1)
 
-      message = IoTHubMessages.pop()
-      print message   
+      temp = IoTHubMessages.pop()
+      message = {}
+      message["Cartisian"] = {}
+      message["Cartisian"]["orientation"] = {}
+      message["Cartisian"]["position"] = {}
+      message["Action"] = temp["Action"]
+      message["Order"] = temp["Order"]
+      message["FriendlyName"] = temp["FriendlyName"]
+      message["Cartisian"]["orientation"]["x"] =float(temp["Cartisian.orientation.x"])
+      message["Cartisian"]["orientation"]["y"] = float(temp["Cartisian.orientation.y"])
+      message["Cartisian"]["orientation"]["z"] = float(temp["Cartisian.orientation.z"])
+      message["Cartisian"]["orientation"]["w"] = float(temp["Cartisian.orientation.w"])
+      message["Cartisian"]["position"]["x"] = float(temp["Cartisian.position.x"])
+      message["Cartisian"]["position"]["y"] = float(temp["Cartisian.position.y"])
+      message["Cartisian"]["position"]["z"] = float(temp["Cartisian.position.z"])
+    
+    #  print(message) 
+      print (message.keys())
+
       if(message["Action"] == "Run"):
        #  message = IoTHubMessages.pop()
          self.completeCommands("Test2") 
          
       if(message["Action"] == "Neutral"):
          self.neutral()
-        
+      if(message["Action"] == "Move"):
+         self.move(message)
+
+
       if(message["Action"] == "Stop"):
         stop = True
         self.head_display.display_image("/home/microshak/Pictures/Stop.png", False, 1.0) 
@@ -201,7 +234,8 @@ class PlayCommands(object):
     for key in lit:
         self.IotHubMessages.insert({key:lit[key]})
         print key +"---" +str(lit[key])
-
+    
+    
     counter += 1
     RECEIVE_CALLBACKS += 1
     return IoTHubMessageDispositionResult.ACCEPTED
@@ -230,6 +264,7 @@ class PlayCommands(object):
     print "MOVING!!!!!!!!!!!!!!!!!"
 
     position = ast.literal_eval(json.dumps(jointpos['Cartisian']))
+    print(position)
     p =  position["position"]
     o = position["orientation"]
     pose_target = geometry_msgs.msg.Pose()
@@ -240,11 +275,14 @@ class PlayCommands(object):
     pose_target.position.x = p["x"]
     pose_target.position.y = p["y"]
     pose_target.position.z = p["z"]
-
     print pose_target
     group = moveit_commander.MoveGroupCommander("right_arm")
+    limb = intera_interface.Limb("right")
+    limb.set_joint_position_speed(.1)
+    
+ #   limb.set_joint_position_speed(.1)
     group.set_pose_target(pose_target)
-   # group.set_joint_value_target(pose_target)
+    # group.set_joint_value_target(pose_target)
     plan2 = group.plan()
     group.go(wait=True)
 
