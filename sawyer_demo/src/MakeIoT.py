@@ -10,14 +10,14 @@ import geometry_msgs.msg
 ## END_SUB_TUTORIAL
 import json, ast
 from std_msgs.msg import String
-
+import numpy as np
 import intera_interface
 import intera_external_devices
 from intera_interface import CHECK_VERSION
 
 import pymongo
 from pymongo import MongoClient
-
+from std_msgs.msg import Header
 from intera_interface import (
     Gripper,
     Lights,
@@ -27,7 +27,7 @@ from intera_interface import (
 )
 import uuid
 
-
+import cv2
 
 import random
 import time
@@ -36,7 +36,7 @@ import iothub_client
 from iothub_client import IoTHubClient, IoTHubClientError, IoTHubTransportProvider
 from iothub_client import IoTHubMessage, IoTHubMessageDispositionResult, IoTHubError, DeviceMethodReturnValue
 #from iothub_client_args import get_iothub_opt, OptionError
-
+import IK
 RECEIVE_CONTEXT = 10000
 MESSAGE_TIMEOUT = 1000000
 RECEIVE_CALLBACKS = 0
@@ -87,10 +87,11 @@ class PlayCommands(object):
 
     
     moveit_commander.roscpp_initialize(sys.argv)
+    print 'ROS INIT'
     rospy.init_node('mid' + str(uuid.uuid4().hex), anonymous=True)
     print 'mid' + str(uuid.uuid4().hex)
     self.head_display = intera_interface.HeadDisplay()
-    self.head_display.display_image("/home/microshak/Pictures/Ready.png", False, 1.0) 
+    self.headText("Hi")
     self.head = intera_interface.Head()
     rp = RobotParams()
     valid_limbs = rp.get_limb_names()
@@ -129,7 +130,12 @@ class PlayCommands(object):
         #rospy.sleep(2)
       
 
-
+  def headText(self, text):
+    img = np.zeros((600,1024,3), np.uint8)
+    cv2.putText(img,"Hello World!!!", (50,50), cv2.FONT_HERSHEY_SIMPLEX, 2, 255)
+    cv2.imwrite("/home/microshak/Pictures/head.png",img)
+    self.head_display.display_image("/home/microshak/Pictures/head.png", False, 1.0) 
+   
 
   def completeCommands(self, Name):
     db = self.Mongoclient.SawyerDB
@@ -186,23 +192,14 @@ class PlayCommands(object):
       rospy.sleep(1)
 
       temp = IoTHubMessages.pop()
+              
       message = {}
-      message["Cartisian"] = {}
-      message["Cartisian"]["orientation"] = {}
-      message["Cartisian"]["position"] = {}
       message["Action"] = temp["Action"]
       message["Order"] = temp["Order"]
       message["FriendlyName"] = temp["FriendlyName"]
-      message["Cartisian"]["orientation"]["x"] =float(temp["Cartisian.orientation.x"])
-      message["Cartisian"]["orientation"]["y"] = float(temp["Cartisian.orientation.y"])
-      message["Cartisian"]["orientation"]["z"] = float(temp["Cartisian.orientation.z"])
-      message["Cartisian"]["orientation"]["w"] = float(temp["Cartisian.orientation.w"])
-      message["Cartisian"]["position"]["x"] = float(temp["Cartisian.position.x"])
-      message["Cartisian"]["position"]["y"] = float(temp["Cartisian.position.y"])
-      message["Cartisian"]["position"]["z"] = float(temp["Cartisian.position.z"])
-    
+
     #  print(message) 
-      print (message.keys())
+      print ("Executing " + message["FriendlyName"])
 
       if(message["Action"] == "Run"):
        #  message = IoTHubMessages.pop()
@@ -210,9 +207,25 @@ class PlayCommands(object):
          
       if(message["Action"] == "Neutral"):
          self.neutral()
-      if(message["Action"] == "Move"):
-         self.move(message)
-
+      if(message["Action"] == "Move" ):
+          
+          
+          message["Cartisian"] = {}
+          message["Cartisian"]["orientation"] = {}
+          message["Cartisian"]["position"] = {}
+          
+          message["Action"] = temp["Action"]
+          message["Speed"] = temp["Speed"]
+          message["Cartisian"]["orientation"]["x"] =float(temp["Cartisian.orientation.x"])
+          message["Cartisian"]["orientation"]["y"] = float(temp["Cartisian.orientation.y"])
+          message["Cartisian"]["orientation"]["z"] = float(temp["Cartisian.orientation.z"])
+          message["Cartisian"]["orientation"]["w"] = float(temp["Cartisian.orientation.w"])
+          message["Cartisian"]["position"]["x"] = float(temp["Cartisian.position.x"])
+          message["Cartisian"]["position"]["y"] = float(temp["Cartisian.position.y"])
+          message["Cartisian"]["position"]["z"] = float(temp["Cartisian.position.z"])
+        
+          self.move(message)
+        
 
       if(message["Action"] == "Stop"):
         stop = True
@@ -258,12 +271,13 @@ class PlayCommands(object):
   
 
 
-  def move(self, jointpos):
+  def move(self, message):
     self.head_display.display_image("/home/microshak/Pictures/Moving.png", False, 1.0) 
     
     print "MOVING!!!!!!!!!!!!!!!!!"
-
-    position = ast.literal_eval(json.dumps(jointpos['Cartisian']))
+    print(message)
+    position = ast.literal_eval(json.dumps(message['Cartisian']))
+    speed = message['Speed']
     print(position)
     p =  position["position"]
     o = position["orientation"]
@@ -275,16 +289,27 @@ class PlayCommands(object):
     pose_target.position.x = p["x"]
     pose_target.position.y = p["y"]
     pose_target.position.z = p["z"]
-    print pose_target
-    group = moveit_commander.MoveGroupCommander("right_arm")
-    limb = intera_interface.Limb("right")
-    limb.set_joint_position_speed(.1)
-    
- #   limb.set_joint_position_speed(.1)
-    group.set_pose_target(pose_target)
-    # group.set_joint_value_target(pose_target)
-    plan2 = group.plan()
-    group.go(wait=True)
+
+
+    if(speed == '' or speed == '1'):
+      print pose_target
+      group = moveit_commander.MoveGroupCommander("right_arm")
+      group.set_pose_target(pose_target)
+      plan2 = group.plan()
+      group.go(wait=True)
+    else:
+      ik = IK.IK()
+      hdr = Header(stamp=rospy.Time.now(), frame_id='base')
+      pose_stamp = geometry_msgs.msg.PoseStamped()
+      pose_stamp.pose = pose_target
+      
+      
+      success,joints = ik.ik_service_client(pose_stamp,rospy)
+      limb_joints = dict(zip(joints.joints[0].name, joints.joints[0].position))
+      limb = intera_interface.Limb("right")
+      limb.set_joint_position_speed(float(speed))
+      limb.move_to_joint_positions(limb_joints, timeout=20.0,threshold=intera_interface.settings.JOINT_ANGLE_TOLERANCE)
+
 
     '''  
 
@@ -313,4 +338,3 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
-O

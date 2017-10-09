@@ -5,7 +5,8 @@ from geometry_msgs.msg import (
     Pose,
     Point,
     Quaternion,
-)
+ )
+
 from std_msgs.msg import Header
 from sensor_msgs.msg import JointState
 
@@ -17,15 +18,16 @@ class IK():
 
     def __init__(self):
         self.limb = "right"
-        rospy.init_node("rsdk_ik_service_client")
+      #  rospy.init_node("rsdk_ik_service_client")
 
 
 
-    def ik_service_client(self, pose1, use_advanced_options = True):
+    def ik_service_client(self, pose1, rospy):
         ns = "ExternalTools/right/PositionKinematicsNode/IKService"
         iksvc = rospy.ServiceProxy(ns, SolvePositionIK)
         ikreq = SolvePositionIKRequest()
         hdr = Header(stamp=rospy.Time.now(), frame_id='base')
+        
         pose1.header = hdr
         poses = {
             'right': pose1
@@ -35,9 +37,9 @@ class IK():
         # Request inverse kinematics from base to "right_hand" link
         ikreq.tip_names.append('right_hand')
 
-        if (use_advanced_options):
+        if (True):
             # Optional Advanced IK parameters
-            rospy.loginfo("Running Advanced IK Service Client example.")
+            #rospy.loginfo("Running Advanced IK Service Client example.")
             # The joint seed is where the IK position solver starts its optimization
             ikreq.seed_mode = ikreq.SEED_USER
             seed = JointState()
